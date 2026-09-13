@@ -22,7 +22,7 @@ def train_step(model, train_dataloader, train_iter, loss_fn, optimizer, scaler, 
     scaler.scale(train_loss).backward()
     scaler.step(optimizer)
     scaler.update()
-    return train_loss
+    return train_loss, train_iter
 
 def test_step(model, test_dl, n_steps, loss_fn, device):
     from tqdm.auto import tqdm
