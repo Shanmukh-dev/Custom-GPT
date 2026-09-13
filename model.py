@@ -175,3 +175,40 @@ class GPTConfig:
     # hidden_layers = 1024
     # n_heads = 4
     # n_layers = 6
+
+
+# ----------- Data loader ------------
+from torch.utils.data import Dataset, DataLoader
+
+class SynthDataset(Dataset):
+  def __init__(self, data, block_size):
+    self.data = data
+    self.block_size = block_size
+
+  def __len__(self):
+    return len(self.data) - self.block_size
+
+  def __getitem__(self, idx):
+    x = self.data[idx:idx+self.block_size]
+    y = self.data[idx+1:idx+self.block_size+1]
+    return x, y
+
+def create_dataloaders(tokens:list, train_split:float, device:str, block_size:int, batch_size:int):
+    data = torch.tensor(tokens, dtype=torch.long, device=device)
+    print("Data length:", len(data))
+    
+    
+    train_split = int(train_split*len(data))
+    train_data = data[:train_split]
+    test_data = data[train_split:]
+    print("Train data length:", len(train_data))
+    print("Test data length:", len(test_data))
+
+    train_dataset = SynthDataset(train_data, block_size)
+    test_dataset = SynthDataset(test_data, block_size)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+    print("Train batches:", len(train_data)/len(train_dataloader))
+    print("Test batches:", len(test_data)/len(test_dataloader))
+    return train_dataloader, test_dataloader
