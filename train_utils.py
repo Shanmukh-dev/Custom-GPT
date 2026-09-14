@@ -44,3 +44,11 @@ def test_step(model, test_dl, n_steps, loss_fn, device):
     test_loss = test_loss / n_steps
 
     return test_loss
+
+def calc_params(model):
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    print(f"Total Parameters: {total_params:,}")
+    print(f"Trainable Parameters: {trainable_params:,}")
