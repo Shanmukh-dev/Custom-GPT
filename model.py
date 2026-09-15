@@ -157,6 +157,12 @@ class CustomGPT(nn.Module):
 
     return idx
 
+  def load_weights(self, weights):
+    state_dict = torch.load(weights, map_location=device)
+    state_dict = {k.removeprefix("module."): v for k, v in state_dict.items()}
+    self.load_state_dict(state_dict)
+    print(f"Loaded weights from {weights}")
+
 
 class GPTConfig:
   def __init__(self, vocab_size, block_size, d_model, hidden_layers, n_heads, n_layers):
