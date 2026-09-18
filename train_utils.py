@@ -2,12 +2,9 @@ import torch
 from torch import nn
 from torch.amp import autocast
 
-def train_step(model, train_dataloader, train_iter, loss_fn, optimizer, scaler, device):
-    try:
-        X_train, y_train = next(train_iter)
-    except StopIteration:
-        train_iter = iter(train_dataloader)
-        X_train, y_train = next(train_iter)
+def train_step(model, train_iter, loss_fn, optimizer, scaler, device):
+
+    X_train, y_train = next(train_iter)
 
     X_train, y_train = X_train.to(device), y_train.to(device)
     

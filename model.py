@@ -184,7 +184,7 @@ class GPTConfig:
 
 
 # ----------- Data loader ------------
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, IterableDataset
 
 class SynthDataset(Dataset):
   def __init__(self, data, block_size):
@@ -198,6 +198,71 @@ class SynthDataset(Dataset):
     x = self.data[idx:idx+self.block_size]
     y = self.data[idx+1:idx+self.block_size+1]
     return x, y
+
+
+class StreamingDataset(IterableDataset):
+    def __init__(
+        self,
+        dataset,
+        tokenizer,
+        block_size,
+        skip_tokens=0,
+        tokenize_batch_size=64
+    ):
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+        self.block_size = block_size
+        self.skip_tokens = skip_tokens
+        self.tokenize_batch_size = tokenize_batch_size
+
+    def __iter__(self):
+        buffer = []
+        seen_tokens = 0
+
+        batch = []
+
+        for sample in self.dataset:
+
+            batch.append(sample["text"])
+
+            # Tokenize multiple documents together
+            if len(batch) < self.tokenize_batch_size:
+                continue
+
+            token_lists = self.tokenizer.encode_ordinary_batch(batch)
+            batch = []
+
+            for tokens in token_lists:
+
+                # Skip tokens from previous phases
+                if seen_tokens + len(tokens) <= self.skip_tokens:
+                    seen_tokens += len(tokens)
+                    continue
+
+                # Skip part of a document if skip_tokens
+                # falls inside this document
+                if seen_tokens < self.skip_tokens:
+                    start = self.skip_tokens - seen_tokens
+                    tokens = tokens[start:]
+                    seen_tokens = self.skip_tokens
+
+                buffer.extend(tokens)
+
+                # Create training samples
+                while len(buffer) >= self.block_size + 1:
+
+                    x = buffer[:self.block_size]
+                    y = buffer[1:self.block_size + 1]
+
+
+                    buffer = buffer[self.block_size:]
+
+
+                    yield (
+                        torch.tensor(x, dtype=torch.long),
+                        torch.tensor(y, dtype=torch.long)
+                    )
+
 
 def create_dataloaders(tokens:list, train_split:float, device:str, block_size:int, batch_size:int):
     data = torch.tensor(tokens, dtype=torch.long, device=device)
@@ -218,3 +283,4 @@ def create_dataloaders(tokens:list, train_split:float, device:str, block_size:in
     print("Train batches:", len(train_data)/len(train_dataloader))
     print("Test batches:", len(test_data)/len(test_dataloader))
     return train_dataloader, test_dataloader
+
