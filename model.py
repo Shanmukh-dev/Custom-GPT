@@ -165,9 +165,10 @@ class CustomGPT(nn.Module):
 
 
 class GPTConfig:
-  def __init__(self, vocab_size, block_size, d_model, hidden_layers, n_heads, n_layers):
+  def __init__(self, vocab_size, block_size, d_model, hidden_layers, n_heads, n_layers, batch_size):
     self.vocab_size = vocab_size
     self.block_size = block_size
+    self.batch_size = self.batch_size
     self.d_model = d_model
     self.hidden_layers = hidden_layers
     self.n_heads = n_heads
