@@ -207,13 +207,13 @@ class StreamingDataset(IterableDataset):
         tokenizer,
         block_size,
         skip_tokens=0,
-        tokenize_batch_size=64
+        batch_size=64
     ):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.block_size = block_size
         self.skip_tokens = skip_tokens
-        self.tokenize_batch_size = tokenize_batch_size
+        self.batch_size = batch_size
 
     def __iter__(self):
         buffer = []
@@ -226,7 +226,7 @@ class StreamingDataset(IterableDataset):
             batch.append(sample["text"])
 
             # Tokenize multiple documents together
-            if len(batch) < self.tokenize_batch_size:
+            if len(batch) < self.batch_size:
                 continue
 
             token_lists = self.tokenizer.encode_ordinary_batch(batch)
