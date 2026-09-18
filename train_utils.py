@@ -19,7 +19,7 @@ def train_step(model, train_iter, loss_fn, optimizer, scaler, device):
     scaler.scale(train_loss).backward()
     scaler.step(optimizer)
     scaler.update()
-    return train_loss, train_iter
+    return train_loss
 
 def test_step(model, test_dl, n_steps, loss_fn, device):
     from tqdm.auto import tqdm
@@ -27,8 +27,8 @@ def test_step(model, test_dl, n_steps, loss_fn, device):
     test_loss = 0
     with torch.inference_mode():
 
-        for idx, (X_test, y_test) in tqdm(enumerate(test_dl)):
-            if idx == n_steps-1:
+        for idx, (X_test, y_test) in tqdm(enumerate(test_dl), total=n_steps):
+            if idx >= n_steps:
               break
             X_test, y_test = X_test.to(device), y_test.to(device)
             test_logits = model(X_test)
