@@ -2,24 +2,33 @@ import torch
 from torch import nn
 from torch.amp import autocast
 
-def train_step(model, train_iter, loss_fn, optimizer, scaler, device):
-
-    X_train, y_train = next(train_iter)
-
-    X_train, y_train = X_train.to(device), y_train.to(device)
-    
+def train_step(model, train_iter, loss_fn, optimizer, scaler, device, accumulation_steps=8):
     model.train()
-    optimizer.zero_grad()
-    with autocast(device_type="cuda" if "cuda" in str(device) else "cpu"):
-    
-        logits = model(X_train)
+    total_loss = 0.0
+
+    for _ in range(accumulation_steps):
+
+        X_train, y_train = next(train_iter)
+
+        X_train, y_train = X_train.to(device), y_train.to(device)
         
-        train_loss = loss_fn(logits.view(-1, logits.size(-1)), y_train.view(-1))
+        with autocast(device_type="cuda" if "cuda" in str(device) else "cpu"):
+        
+            logits = model(X_train)
+            
+            train_loss = loss_fn(logits.view(-1, logits.size(-1)), y_train.view(-1))
+
+            train_loss = train_loss / accumulation_steps
+        
+        scaler.scale(train_loss).backward()
+        total_loss += train_loss.item()
     
-    scaler.scale(train_loss).backward()
     scaler.step(optimizer)
     scaler.update()
-    return train_loss
+    optimizer.zero_grad()
+
+
+    return total_loss
 
 def test_step(model, test_dl, n_steps, loss_fn, device):
     from tqdm.auto import tqdm
