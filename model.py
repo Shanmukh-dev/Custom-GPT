@@ -236,6 +236,9 @@ class StreamingDataset(IterableDataset):
             for tokens in token_lists:
 
                 # Skip tokens from previous phases
+                tokens.append(self.tokenizer.eot_token)
+
+              
                 if seen_tokens + len(tokens) <= self.skip_tokens:
                     seen_tokens += len(tokens)
                     continue
