@@ -125,3 +125,34 @@ def create_dataloaders(tokens:list, train_split:float, device:str, block_size:in
     print("Train batches:", len(train_data)/len(train_dataloader))
     print("Test batches:", len(test_data)/len(test_dataloader))
     return train_dataloader, test_dataloader
+
+
+def create_shards_dataloaders(path, train_split, block_size, batch_size, num_workers=0):
+    dataset = TokenShardDataset(path, block_size)
+
+    split = int(train_split*len(dataset))
+
+    train_dataset = torch.utils.data.Subset(dataset, range(0, split))
+    test_dataset = torch.utils.data.Subset(dataset, range(split, len(dataset)))
+
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        pin_memory=True,
+        num_workers=num_workers
+    )
+
+    test_dataloader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        pin_memory=True,
+        num_workers=num_workers
+    )
+
+    print("Total samples:", len(dataset))
+    print("Train samples:", len(train_dataset))
+    print("Test samples:", len(test_dataset))
+
+    return train_dataloader, test_dataloader
