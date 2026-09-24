@@ -100,11 +100,11 @@ class TokenShardDataset(Dataset):
         x = self.tokens[idx:idx+self.block_size]
         y = self.tokens[idx+1:idx+self.block_size+1]
 
-        # return (
-        #     torch.from_numpy(x.astype(np.int64)),
-        #     torch.from_numpy(y.astype(np.int64)),
-        # )
-        return x, y
+        return (
+            torch.from_numpy(x.astype(np.int64)),
+            torch.from_numpy(y.astype(np.int64)),
+        )
+        # return x, y
 
 def create_dataloaders(tokens:list, train_split:float, device:str, block_size:int, batch_size:int):
     data = torch.tensor(tokens, dtype=torch.long, device=device)
