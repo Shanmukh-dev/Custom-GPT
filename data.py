@@ -140,7 +140,8 @@ def create_shards_dataloaders(path, train_split, block_size, batch_size, num_wor
         batch_size=batch_size,
         shuffle=True,
         pin_memory=True,
-        num_workers=num_workers
+        num_workers=num_workers,
+        persistent_workers=True
     )
 
     test_dataloader = DataLoader(
@@ -148,7 +149,8 @@ def create_shards_dataloaders(path, train_split, block_size, batch_size, num_wor
         batch_size=batch_size,
         shuffle=True,
         pin_memory=True,
-        num_workers=num_workers
+        num_workers=num_workers,
+        persistent_workers=True
     )
 
     print("Total samples:", len(dataset))

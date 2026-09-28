@@ -14,20 +14,19 @@ class MultiHeadAttention(nn.Module):
     self.n_heads = n_heads
     self.head_dim = d_model // n_heads
 
-    self.query = nn.Linear(in_features=d_model, out_features=d_model).to(device)
-    self.key = nn.Linear(in_features=d_model, out_features=d_model).to(device)
-    self.value = nn.Linear(in_features=d_model, out_features=d_model).to(device)
+    self.query = nn.Linear(in_features=d_model, out_features=d_model)
+    self.key = nn.Linear(in_features=d_model, out_features=d_model)
+    self.value = nn.Linear(in_features=d_model, out_features=d_model)
 
-    self.out_proj = nn.Linear(d_model, d_model).to(device)
+    self.out_proj = nn.Linear(d_model, d_model)
 
   def forward(self, X):
-    X = X.to(device)
     B, T, C = X.shape
     Q, K, V = self.query(X), self.key(X), self.value(X)
 
-    Q = Q.view(B, T, self.n_heads, self.head_dim).to(device)
-    K = K.view(B, T, self.n_heads, self.head_dim).to(device)
-    V = V.view(B, T, self.n_heads, self.head_dim).to(device)
+    Q = Q.view(B, T, self.n_heads, self.head_dim)
+    K = K.view(B, T, self.n_heads, self.head_dim)
+    V = V.view(B, T, self.n_heads, self.head_dim)
 
     Q = Q.transpose(1, 2)
     K = K.transpose(1, 2)
@@ -37,17 +36,17 @@ class MultiHeadAttention(nn.Module):
     scores = scores / math.sqrt(self.head_dim)
 
 
-    causal_mask = torch.tril(torch.ones(T, T)).to(device)
-    scores = scores.masked_fill(causal_mask == 0, float("-inf")).to(device)
+    causal_mask = torch.ones(T, T, device=scores.device, dtype=torch.bool).tril()
+    scores = scores.masked_fill(~causal_mask, float("-inf"))
 
-    attn_weights = torch.softmax(scores, dim = -1).to(device)
+    attn_weights = torch.softmax(scores, dim=-1)
 
     attn = attn_weights @ V
 
 
     attn = attn.transpose(1, 2)
 
-    attn = attn.contiguous().view(B, T, self.d_model).to(device)
+    attn = attn.contiguous().view(B, T, self.d_model)
 
     attn = self.out_proj(attn)
     return attn
@@ -60,14 +59,13 @@ class MLP(nn.Module):
     super().__init__()
 
     self.mpl_layer = nn.Sequential(
-        nn.Linear(in_features=input_dimensions, out_features=hidden_layers).to(device),
-        nn.GELU().to(device),
-        nn.Linear(in_features=hidden_layers, out_features=output_dimensions).to(device)
-    ).to(device)
+        nn.Linear(in_features=input_dimensions, out_features=hidden_layers),
+        nn.GELU(),
+        nn.Linear(in_features=hidden_layers, out_features=output_dimensions)
+      )
 
 
   def forward(self, X):
-    X = X.to(device)
     return self.mpl_layer(X)
 
 
@@ -75,22 +73,20 @@ class TransformerBlock(nn.Module):
   def __init__(self, d_model, n_heads, hidden_layers):
     super().__init__()
 
-    self.multi_head_attention = MultiHeadAttention(d_model, n_heads).to(device)
-    self.mlp = MLP(d_model, hidden_layers, d_model).to(device)
+    self.multi_head_attention = MultiHeadAttention(d_model, n_heads)
+    self.mlp = MLP(d_model, hidden_layers, d_model)
 
-    self.ln1 = nn.LayerNorm(d_model).to(device)
-    self.ln2 = nn.LayerNorm(d_model).to(device)
+    self.ln1 = nn.LayerNorm(d_model)
+    self.ln2 = nn.LayerNorm(d_model)
 
 
   def forward(self, X):
-    X = X.to(device)
-
     normalized_X = self.ln1(X)
     attention_weights = self.multi_head_attention(normalized_X)
     attention_weights = X + attention_weights
 
 
-    normalized_attention_weights = self.ln2(attention_weights).to(device)
+    normalized_attention_weights = self.ln2(attention_weights)
     mlp_output = self.mlp(normalized_attention_weights)
 
     output = attention_weights + mlp_output
@@ -126,7 +122,7 @@ class CustomGPT(nn.Module):
     B, T = idx.shape
 
     tok_embd = self.token_embeddings(idx)
-    pos = torch.arange(T, device=device)
+    pos = torch.arange(T, device=idx.device)
 
     pos_embd = self.positional_embeddings(pos)
 
@@ -144,6 +140,7 @@ class CustomGPT(nn.Module):
 
   @torch.no_grad()
   def generate(self, idx, max_new_tokens=500):
+    idx = idx.to(next(self.parameters()).device)
     for _ in range(max_new_tokens):
       idx_cont = idx[:, -self.config.block_size:]
 
@@ -158,7 +155,7 @@ class CustomGPT(nn.Module):
     return idx
 
   def load_weights(self, weights):
-    state_dict = torch.load(weights, map_location=device)
+    state_dict = torch.load(weights, map_location=next(self.parameters()).device)
     state_dict = {k.removeprefix("module."): v for k, v in state_dict.items()}
     self.load_state_dict(state_dict)
     print(f"Loaded weights from {weights}")
