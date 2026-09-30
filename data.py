@@ -106,6 +106,49 @@ class TokenShardDataset(Dataset):
         )
         # return x, y
 
+
+
+
+class SFTDataset(Dataset):
+    def __init__(self, examples, tokenizer, block_size):
+        self.examples = examples
+        self.tokenizer = tokenizer
+        self.block_size = block_size
+
+
+        self.sequences = []
+
+        current= []
+
+        for example in self.examples:
+            text = examples["text"]
+
+            tokens = tokenizer.encode(text)
+
+            current.extend(tokens)
+
+            if len(current) >= 1024:
+                self.sequences.append(current.copy())
+
+                current = []
+
+
+    def __len__(self):
+        return len(self.sequences)
+
+    def __getitem__(self, idx):
+        seq = self.sequences[idx]
+
+        x = torch.tensor(seq[:-1], dtype=torch.long)
+        y = torch.tensor(seq[1:], dtype=torch.long)
+
+        return x, y
+
+            
+
+
+
+
 def create_dataloaders(tokens:list, train_split:float, device:str, block_size:int, batch_size:int):
     data = torch.tensor(tokens, dtype=torch.long, device=device)
     print("Data length:", len(data))
@@ -157,4 +200,22 @@ def create_shards_dataloaders(path, train_split, block_size, batch_size, num_wor
     print("Train samples:", len(train_dataset))
     print("Test samples:", len(test_dataset))
 
+    return train_dataloader, test_dataloader
+
+
+
+
+def create_sft_dataloaders(data, tokenizer, train_aplit, block_size, batch_size):
+    split = int(train_aplit*len(data))
+    train_dataset = SFTDataset(data[:split], tokenizer, block_size)
+    test_dataset = SFTDataset(data[split:], tokenizer, block_size)
+
+
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
+
+    print("Total examples: ", len(data))
+    print("Train examples: ", len(train_dataset))
+    print("Test examples: ", len(test_dataset))
     return train_dataloader, test_dataloader
