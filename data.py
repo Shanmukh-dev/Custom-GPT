@@ -118,29 +118,28 @@ class SFTDataset(Dataset):
 
         self.sequences = []
 
-        current= []
+        # current= []
 
         for example in self.examples:
-            text = examples["text"]
+            text = example["text"]
 
-            tokens = tokenizer.encode(text)
+            tokens = tokenizer.encode(text, allowed_special="all")
 
-            current.extend(tokens)
+            # if len(tokens) > block_size:
+            #     continue
+            self.sequences.extend(tokens)
 
-            if len(current) >= 1024:
-                self.sequences.append(current.copy())
 
-                current = []
 
 
     def __len__(self):
-        return len(self.sequences)
+        return len(self.sequences) - self.block_size
 
     def __getitem__(self, idx):
-        seq = self.sequences[idx]
+        # seq = self.sequences[idx]
 
-        x = torch.tensor(seq[:-1], dtype=torch.long)
-        y = torch.tensor(seq[1:], dtype=torch.long)
+        x = torch.tensor(self.sequences[idx:idx+self.block_size], dtype=torch.long)
+        y = torch.tensor(self.sequences[idx+1:idx+self.block_size+1], dtype=torch.long)
 
         return x, y
 
