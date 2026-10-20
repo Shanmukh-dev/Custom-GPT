@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import math
+import tiktoken
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -110,6 +111,7 @@ class CustomGPT(nn.Module):
         self.layer_norm = nn.LayerNorm(config.d_model)
         self.lm_head = nn.Linear(config.d_model, config.vocab_size)
         self.config = config
+        self.eot = tiktoken.get_encoding("gpt2").eot_token
 
     def forward(self, idx):
         B, T = idx.shape
@@ -197,7 +199,10 @@ class CustomGPT(nn.Module):
 
             # probs = torch.softmax(logits, dim=-1)
             # new_tokens = torch.multinomial(probs, num_samples=1)
+            
             idx = torch.cat((idx, new_tokens), dim=1)
+            if self.eot in new_tokens:
+                return idx
 
         return idx
 
