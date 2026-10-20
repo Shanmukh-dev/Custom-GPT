@@ -5,180 +5,226 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class MultiHeadAttention(nn.Module):
-  def __init__(self, d_model, n_heads):
-    super().__init__()
+    def __init__(self, d_model, n_heads):
+        super().__init__()
 
-    assert d_model % n_heads == 0
+        assert d_model % n_heads == 0
 
-    self.d_model = d_model
-    self.n_heads = n_heads
-    self.head_dim = d_model // n_heads
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.head_dim = d_model // n_heads
 
-    self.query = nn.Linear(in_features=d_model, out_features=d_model)
-    self.key = nn.Linear(in_features=d_model, out_features=d_model)
-    self.value = nn.Linear(in_features=d_model, out_features=d_model)
+        self.query = nn.Linear(in_features=d_model, out_features=d_model)
+        self.key = nn.Linear(in_features=d_model, out_features=d_model)
+        self.value = nn.Linear(in_features=d_model, out_features=d_model)
 
-    self.out_proj = nn.Linear(d_model, d_model)
+        self.out_proj = nn.Linear(d_model, d_model)
 
-  def forward(self, X):
-    B, T, C = X.shape
-    Q, K, V = self.query(X), self.key(X), self.value(X)
+    def forward(self, X):
+        B, T, C = X.shape
+        Q, K, V = self.query(X), self.key(X), self.value(X)
 
-    Q = Q.view(B, T, self.n_heads, self.head_dim)
-    K = K.view(B, T, self.n_heads, self.head_dim)
-    V = V.view(B, T, self.n_heads, self.head_dim)
+        Q = Q.view(B, T, self.n_heads, self.head_dim)
+        K = K.view(B, T, self.n_heads, self.head_dim)
+        V = V.view(B, T, self.n_heads, self.head_dim)
 
-    Q = Q.transpose(1, 2)
-    K = K.transpose(1, 2)
-    V = V.transpose(1, 2)
+        Q = Q.transpose(1, 2)
+        K = K.transpose(1, 2)
+        V = V.transpose(1, 2)
 
-    scores = Q @ K.transpose(-1, -2)
-    scores = scores / math.sqrt(self.head_dim)
+        scores = Q @ K.transpose(-1, -2)
+        scores = scores / math.sqrt(self.head_dim)
 
+        causal_mask = torch.ones(
+            T, T, device=scores.device, dtype=torch.bool).tril()
+        scores = scores.masked_fill(~causal_mask, float("-inf"))
 
-    causal_mask = torch.ones(T, T, device=scores.device, dtype=torch.bool).tril()
-    scores = scores.masked_fill(~causal_mask, float("-inf"))
+        attn_weights = torch.softmax(scores, dim=-1)
 
-    attn_weights = torch.softmax(scores, dim=-1)
+        attn = attn_weights @ V
 
-    attn = attn_weights @ V
+        attn = attn.transpose(1, 2)
 
+        attn = attn.contiguous().view(B, T, self.d_model)
 
-    attn = attn.transpose(1, 2)
-
-    attn = attn.contiguous().view(B, T, self.d_model)
-
-    attn = self.out_proj(attn)
-    return attn
-
-
+        attn = self.out_proj(attn)
+        return attn
 
 
 class MLP(nn.Module):
-  def __init__(self, input_dimensions, hidden_layers, output_dimensions) -> None:
-    super().__init__()
+    def __init__(self, input_dimensions, hidden_layers, output_dimensions) -> None:
+        super().__init__()
 
-    self.mpl_layer = nn.Sequential(
-        nn.Linear(in_features=input_dimensions, out_features=hidden_layers),
-        nn.GELU(),
-        nn.Linear(in_features=hidden_layers, out_features=output_dimensions)
-      )
+        self.mpl_layer = nn.Sequential(
+            nn.Linear(in_features=input_dimensions,
+                      out_features=hidden_layers),
+            nn.GELU(),
+            nn.Linear(in_features=hidden_layers,
+                      out_features=output_dimensions)
+        )
 
-
-  def forward(self, X):
-    return self.mpl_layer(X)
+    def forward(self, X):
+        return self.mpl_layer(X)
 
 
 class TransformerBlock(nn.Module):
-  def __init__(self, d_model, n_heads, hidden_layers):
-    super().__init__()
+    def __init__(self, d_model, n_heads, hidden_layers):
+        super().__init__()
 
-    self.multi_head_attention = MultiHeadAttention(d_model, n_heads)
-    self.mlp = MLP(d_model, hidden_layers, d_model)
+        self.multi_head_attention = MultiHeadAttention(d_model, n_heads)
+        self.mlp = MLP(d_model, hidden_layers, d_model)
 
-    self.ln1 = nn.LayerNorm(d_model)
-    self.ln2 = nn.LayerNorm(d_model)
+        self.ln1 = nn.LayerNorm(d_model)
+        self.ln2 = nn.LayerNorm(d_model)
 
+    def forward(self, X):
+        normalized_X = self.ln1(X)
+        attention_weights = self.multi_head_attention(normalized_X)
+        attention_weights = X + attention_weights
 
-  def forward(self, X):
-    normalized_X = self.ln1(X)
-    attention_weights = self.multi_head_attention(normalized_X)
-    attention_weights = X + attention_weights
+        normalized_attention_weights = self.ln2(attention_weights)
+        mlp_output = self.mlp(normalized_attention_weights)
 
+        output = attention_weights + mlp_output
 
-    normalized_attention_weights = self.ln2(attention_weights)
-    mlp_output = self.mlp(normalized_attention_weights)
-
-    output = attention_weights + mlp_output
-
-    return output
-
-
+        return output
 
 
 class CustomGPT(nn.Module):
-  def __init__(self, config):
-    super().__init__()
-    self.token_embeddings = nn.Embedding(config.vocab_size, config.d_model)
+    def __init__(self, config):
+        super().__init__()
+        self.token_embeddings = nn.Embedding(config.vocab_size, config.d_model)
 
-    self.positional_embeddings = nn.Embedding(config.block_size, config.d_model)
+        self.positional_embeddings = nn.Embedding(
+            config.block_size, config.d_model)
+
+        self.transformer_blocks = nn.ModuleList(
+            [
+                TransformerBlock(config.d_model, config.n_heads,
+                                 config.hidden_layers)
+                for _ in range(config.n_layers)
+
+            ]
+        )
+
+        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size)
+        self.config = config
+
+    def forward(self, idx):
+        B, T = idx.shape
+
+        tok_embd = self.token_embeddings(idx)
+        pos = torch.arange(T, device=idx.device)
+
+        pos_embd = self.positional_embeddings(pos)
+
+        X = tok_embd + pos_embd
+
+        for block in self.transformer_blocks:
+            X = block(X)
+
+        X = self.layer_norm(X)
+
+        logits = self.lm_head(X)
+
+        return logits
+
+    @torch.no_grad()
+    def generate(self, idx, max_new_tokens=500, temperature=1.0, top_k=None, top_p=1.0):
+        idx = idx.to(next(self.parameters()).device)
+
+        if temperature < 0:
+            raise ValueError("Tmeparature cannot be negative.")
+        if top_k is not None and top_k < 0:
+            raise ValueError("Top-k must be >= 1 or None")
+
+        if not 0 < top_p <= 1:
+            raise ValueError("Top-p must be in (0, 1]")
+
+        for _ in range(max_new_tokens):
+            idx_cont = idx[:, -self.config.block_size:]
+
+            logits = self(idx_cont)
+
+            logits = logits[:, -1, :]
+
+            if temperature == 0:
+                new_tokens = logits.argmax(dim=-1, keepdim=True)
+            else:
+                logits = logits / temperature
+                if top_k is not None:
+                    k = min(top_k, logits.size(-1))
+                    top_k_values = torch.topk(logits, k, dim=-1).values
+                    threshold = top_k_values[:, -1].unsqueeze(-1)
+                    logits = logits.masked_fill(
+                        logits < threshold, float("-inf"))
 
 
-    self.transformer_blocks = nn.ModuleList(
-        [
-            TransformerBlock(config.d_model, config.n_heads, config.hidden_layers)
-            for _ in range(config.n_layers)
+                if top_p < 1.0:
+                    sorted_logits, sorted_indices = torch.sort(
+                        logits, descending=True, dim=-1
+                    )
 
-        ]
-    )
+                    sorted_probs = torch.softmax(sorted_logits, dim=-1)
+                    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
 
+                    # Remove tokens only after the cumulative mass
+                    # before that token has reached top_p.
+                    sorted_indices_to_remove = (
+                        cumulative_probs - sorted_probs
+                    ) >= top_p
 
-    self.layer_norm = nn.LayerNorm(config.d_model)
-    self.lm_head = nn.Linear(config.d_model, config.vocab_size)
-    self.config = config
+                    # Restore the original vocabulary order.
+                    indices_to_remove = torch.zeros_like(
+                        sorted_indices_to_remove
+                    ).scatter(
+                        dim=-1,
+                        index=sorted_indices,
+                        src=sorted_indices_to_remove,
+                    )
 
+                    logits = logits.masked_fill(
+                        indices_to_remove,
+                        float("-inf")
+                    )
 
-  def forward(self, idx):
-    B, T = idx.shape
+            # 4. Convert the filtered logits to probabilities
+            probs = torch.softmax(logits, dim=-1)
 
-    tok_embd = self.token_embeddings(idx)
-    pos = torch.arange(T, device=idx.device)
+            # 5. Sample the next token
+            new_tokens = torch.multinomial(probs, num_samples=1)
 
-    pos_embd = self.positional_embeddings(pos)
+            # probs = torch.softmax(logits, dim=-1)
+            # new_tokens = torch.multinomial(probs, num_samples=1)
+            idx = torch.cat((idx, new_tokens), dim=1)
 
-    X = tok_embd + pos_embd
+        return idx
 
-    for block in self.transformer_blocks:
-      X = block(X)
-
-    X = self.layer_norm(X)
-
-    logits = self.lm_head(X)
-
-    return logits
-
-
-  @torch.no_grad()
-  def generate(self, idx, max_new_tokens=500):
-    idx = idx.to(next(self.parameters()).device)
-    for _ in range(max_new_tokens):
-      idx_cont = idx[:, -self.config.block_size:]
-
-      logits = self(idx_cont)
-
-      logits = logits[:, -1, :]
-
-      probs = torch.softmax(logits, dim=-1)
-      new_tokens = torch.multinomial(probs, num_samples=1)
-      idx = torch.cat((idx, new_tokens), dim=1)
-
-    return idx
-
-  def load_weights(self, weights):
-    state_dict = torch.load(weights, map_location=next(self.parameters()).device)
-    state_dict = {k.removeprefix("module."): v for k, v in state_dict.items()}
-    self.load_state_dict(state_dict)
-    print(f"Loaded weights from {weights}")
+    def load_weights(self, weights):
+        state_dict = torch.load(
+            weights, map_location=next(self.parameters()).device)
+        state_dict = {k.removeprefix(
+            "module."): v for k, v in state_dict.items()}
+        self.load_state_dict(state_dict)
+        print(f"Loaded weights from {weights}")
 
 
 class GPTConfig:
-  def __init__(self, vocab_size, block_size, d_model, hidden_layers, n_heads, n_layers, batch_size):
-    self.vocab_size = vocab_size
-    self.block_size = block_size
-    self.batch_size = batch_size
-    self.d_model = d_model
-    self.hidden_layers = hidden_layers
-    self.n_heads = n_heads
-    self.n_layers = n_layers
-    
-    # Approximately:
-    # vocab_size = tokenizer.n_vocab
-    # block_size = 256
+    def __init__(self, vocab_size, block_size, d_model, hidden_layers, n_heads, n_layers, batch_size):
+        self.vocab_size = vocab_size
+        self.block_size = block_size
+        self.batch_size = batch_size
+        self.d_model = d_model
+        self.hidden_layers = hidden_layers
+        self.n_heads = n_heads
+        self.n_layers = n_layers
 
-    # d_model = 256
-    # hidden_layers = 1024
-    # n_heads = 4
-    # n_layers = 6
+        # Approximately:
+        # vocab_size = tokenizer.n_vocab
+        # block_size = 256
 
-
-
+        # d_model = 256
+        # hidden_layers = 1024
+        # n_heads = 4
+        # n_layers = 6
